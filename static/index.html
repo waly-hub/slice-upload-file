@@ -1,13 +1,122 @@
-<!doctype html>
+<!DOCTYPE html>
+<html lang="en">
 
-<h1>hello world</h1>
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Document</title>
+</head>
 
-<progress id="progress" value="0"></progress>
+<body>
+  <input id="file-selector" type="file" multiple>
+  <script src="dist/cos-js-sdk-v5.min.js"></script>
+  <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+  <script>
 
-<p>
-  <input type="file" id="uploader" />
-</p>
+    // 存储桶名称，由bucketname-appid 组成，appid必须填入，可以在COS控制台查看存储桶名称。 https://console.cloud.tencent.com/cos5/bucket
+    var Bucket = '你的Bucket'
+    // 存储桶Region可以在COS控制台指定存储桶的概览页查看 https://console.cloud.tencent.com/cos5/bucket/ 
+    // 关于地域的详情见 https://cloud.tencent.com/document/product/436/6224
+    var Region = '你的Region'
 
-<script src="https://unpkg.com/crypto-js@4.1.1/crypto-js.js"></script>
-<script src="https://unpkg.com/axios@0.21.1/dist/axios.min.js"></script>
-<script src="./index.js"></script>
+    // 初始化实例
+    var cos = new COS({
+      getAuthorization: async function (options, callback) {
+        var url = 'http://localhost:3000/sts' // 这里替换成您的服务接口地址
+        const res = await axios.post(url)
+        const { data } = res
+        const credentials = data.credentials
+        console.log('data', data)
+        if (!data || !credentials) return console.error('credentials invalid')
+        callback({
+          TmpSecretId: credentials.tmpSecretId,
+          TmpSecretKey: credentials.tmpSecretKey,
+          XCosSecurityToken: credentials.sessionToken,
+          StartTime: data.startTime, // 时间戳，单位秒，如：1580000000，建议返回服务器时间作为签名的开始时间，避免用户浏览器本地时间偏差过大导致签名错误
+          ExpiredTime: data.expiredTime, // 时间戳，单位秒，如：1580000900
+        })
+      }
+    })
+
+    // 监听选文件
+    document.getElementById('file-selector').onchange = function () {
+      var file = this.files[0]
+      console.log(Array.from(this.files))
+      const fileList = Array.from(this.files)
+      if (!file) return
+      // 分片上传文件
+      // cos.sliceUploadFile({
+      //   Bucket: Bucket,
+      //   Region: Region,
+      //   Key: file.name,
+      //   Body: file,
+      //   onHashProgress: function (progressData) {
+      //     console.log('校验中', JSON.stringify(progressData))
+      //   },
+      //   onProgress: function (progressData) {
+      //     console.log('上传中', JSON.stringify(progressData))
+      //   },
+      // }, function (err, data) {
+      //   console.log(err, data)
+      // })
+
+      // 简单上传
+      // cos.putObject({
+      //   Bucket, /* 填入您自己的存储桶，必须字段 */
+      //   Region,  /* 存储桶所在地域，例如ap-beijing，必须字段 */
+      //   Key: file.name,  /* 存储在桶里的对象键（例如1.jpg，a/b/test.txt），必须字段 */
+      //   Body: file, /* 必须，上传文件对象，可以是input[type="file"]标签选择本地文件后得到的file对象 */
+      //   onProgress: function (progressData) {
+      //     console.log('校验中...', JSON.stringify(progressData))
+      //   }
+      // }, function (err, data) {
+      //   console.log(err || data)
+      // })
+
+      // 高级上传
+      cos.uploadFile({
+        Bucket, /* 填入您自己的存储桶，必须字段 */
+        Region,  /* 存储桶所在地域，例如ap-beijing，必须字段 */
+        Key: file.name,  /* 存储在桶里的对象键（例如1.jpg，a/b/test.txt），必须字段 */
+        Body: file, /* 必须，上传文件对象，可以是input[type="file"]标签选择本地文件后得到的file对象 */
+        SliceSize: 1024 * 1024 * 0.5,     /* 触发分块上传的阈值，超过5MB使用分块上传，非必须 */
+        onTaskReady: function (taskId) {                   /* 非必须 */
+          console.log(taskId)
+        },
+        onProgress: function (progressData) {           /* 非必须 */
+          console.log(JSON.stringify(progressData))
+        },
+        onFileFinish: function (err, data, options) {   /* 非必须 */
+          console.log(options.Key + '上传' + (err ? '失败' : '完成'))
+        },
+      }, function (err, data) {
+        console.log(err || data)
+      })
+      // const files = fileList.map(item => {
+      //   return {
+      //     Bucket,
+      //     Region,
+      //     Key: item.name,
+      //     Body: item
+      //   }
+      // })
+      // cos.uploadFiles({
+      //   files,
+      //   SliceSize: 1024 * 1024 * 10,    /* 设置大于10MB采用分块上传 */
+      //   onProgress: function (info) {
+      //     var percent = parseInt(info.percent * 10000) / 100
+      //     var speed = parseInt(info.speed / 1024 / 1024 * 100) / 100
+      //     console.log('进度：' + percent + '%; 速度：' + speed + 'Mb/s;')
+      //   },
+      //   onFileFinish: function (err, data, options) {
+      //     console.log(options.Key + '上传' + (err ? '失败' : '完成'))
+      //   },
+      // }, function (err, data) {
+      //   console.log(err || data)
+      // })
+    };
+  </script>
+</body>
+
+</html>
